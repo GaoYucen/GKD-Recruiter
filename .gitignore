@@ -1,1 +1,6 @@
 data/previous/
+data/*.pt
+data/*.pth
+log/
+__pycache__/
+.DS_Store

@@ -1,55 +1,54 @@
 
-# Data Generation and Processing Guide
+# Data Directory Structure and Specification
 
-本项目的数据生成与预处理逻辑分为两个核心部分：模拟物理环境的 Raw Data 以及专为 GKD-Recruiter 模型设计的 Processed Features。
+This directory stores all data required for the GKD-Recruiter project. To decouple "physical environment" from "model algorithms", data is strictly divided into three layers: raw data layer, environment parameters layer, and model input layer.
 
-## 1. 目录结构
+## 1. Directory Overview
 
 ```
 data/
-├── raw_data/                # 原始物理世界数据（环境引擎输入）
-└── processed_features/      # 预处理后的张量（模型训练输入）
+├── source_data/       # Raw objective data (simulating raw information collected from the real world)
+├── env_params/        # Physical environment parameters (game environment ground truth calculated based on paper formulas)
+└── model_inputs/      # Model preprocessed features (tensors optimized for neural network training)
 ```
 
-## 2. 数据说明
+## 2. Detailed Description
 
-### A. 原始数据 (Raw Data)
+### A. Raw Data Layer (source_data/)
 
-该目录包含描述空间众包环境和社交网络的基础数据。这些文件主要用于评估器 (Evaluator)，以确保不同算法在相同的物理约束下进行公平对比。
+This directory simulates raw information directly obtained from LBSN (e.g., Gowalla). These data reflect the objective existence of the physical world, without any processing tailored to tasks or models.
 
-| 文件名 | 格式 | 说明 |
-|--------|------|------|
-| edge_index.txt | [E, 2] | 社交网络边索引，表示用户间的有向社交关系。 |
-| edge_weight.txt | [E] | 基础社交扩散概率 w_ij，模拟真实世界极低的转化率 (1%~10%)。 |
-| q_matrix.txt | [U, T] | 质量潜力矩阵：工人 u 对任务 t 的潜在贡献质量 q_ut ∈[0,1]。 |
-| a_matrix.txt | [U, T] | 任务亲和力矩阵：工人对特定任务的参与意愿 a_ut ∈[0,1]。 |
-| task_demands.txt | [T] | 任务需求量 d_l，定义了任务达到“饱和陷阱”之前的质量阈值。 |
-| worker_indices.txt | [U] | 从全局节点中挑选出的候选工人 ID 集合。 |
+- raw_edge_index.txt: Raw social network friend relationship pairs.
+- worker_locations.txt: 2D geographical coordinates of candidate workers in a 10×10 space.
+- task_locations.txt: 2D geographical coordinates of task publications.
+- raw_visit_freq.txt: Historical visit frequencies of workers to various task areas, reflecting spatial preferences.
 
-### B. 预处理特征 (Processed Features)
+### B. Environment Parameters Layer (env_params/)
 
-该目录包含专为 GKD-Recruiter 架构设计的特征矩阵和辅助结构，用于加速 GNN 和 Reinforcement Learning 的训练过程。
+This directory stores the environment ground truth (Ground Truth) that the evaluator (evaluate.py) and all comparison baselines depend on. These parameters are generated based on the core formulas in the paper.
 
-- 初始特征：node_features.txt (3000x64) 和 task_features.txt (100x64)，用于嵌入层初始化。
-- 异构图结构：针对 RGCN 模块，预先根据质量潜力选出每个工人的 Top-5 关联任务，存储于 hetero_edge_index.txt。
-- 相似度矩阵：针对 Correlation Layer，预先计算好的 worker_sim_adj 与 task_sim_adj，用于捕捉全局关联性。
+- w_ij.txt: Base influence probability w_ij on social edges. Simulates extremely low social conversion rates in the real world (0.01∼0.1).
+- q_matrix.txt: Quality potential matrix (q_il). Calculated based on spatial distance decay, reflecting the potential contribution of workers to tasks.
+- a_matrix.txt: Task affinity matrix (a_il). Calculated and normalized by combining task rewards and visit frequencies, determining the probability of social influence converting to offline participation.
+- task_demands.txt: Task demands d_l. Defines the saturation threshold for each task, a key constraint for solving the "saturation trap" problem.
+- worker_indices.txt: Set of candidate worker IDs with recruitment value.
 
-## 3. 生成逻辑核心约束
+### C. Model Input Layer (model_inputs/)
 
-为了确保合成数据具有真实科研价值，data_gen_2.py 引入了以下关键物理约束：
+This directory contains preprocessed tensors designed specifically for the GKD-Recruiter deep architecture, aimed at accelerating the computation of IGAT and RGCN modules.
 
-- **低社交转化率**：社交边的传播概率被严格约束在 [0.01,0.1]，防止出现非理性的全网大规模扩散。
-- **需求饱和机制**：任务需求量设定在 [10,50]，配合归一化后的亲和力矩阵，使得任务不会轻易达到饱和，从而考验算法的精准分配能力。
-- **任务感知扩散**：激活概率遵循 p_ij(t_l)=w_ij × a_jl，体现了线上社交向线下参与转化时的折损。
+- node_features.txt / task_features.txt: Initial Embedding vectors for neural network input layers.
+- hetero_edge_index.txt: Heterogeneous edges pruned for RGCN. Only retains the top-m (Top-5) "worker-task" associations by quality potential to reduce computational complexity.
+- worker_sim_adj.txt / task_sim_adj.txt: Cosine similarity matrices used by the Correlation Layer, capturing global spatial/interest associations between nodes.
 
-## 4. 如何使用
+## 3. Experimental Data Flow
 
-### 生成合成数据
-
-运行以下命令生成用于模型调试的合成数据集：
+- **Training Phase**: The model reads model_inputs/ to obtain heterogeneous graph structures and initial features for strategy learning.
+- **Decision Phase**: The model outputs a set of seed pairs (u,t) based on the current state.
+- **Evaluation Phase**: The evaluation engine only reads w, q, a, d from env_params/ for Monte Carlo simulation, calculating the ETS (Effective Task Satisfaction) metric.
 
 ```bash
-python data/data_gen_2.py
+python data/data_gen.py
 ```
 
 ### 使用真实数据
