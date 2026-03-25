@@ -1,110 +1,88 @@
-# GKD-Recruiter
+# GKD-Recruiter: Graph Knowledge Distillation for Spatial Crowdsourcing
 
-GKD-Recruiter: A Graph Neural Network and Distillation-based Framework for Worker Recruitment in Spatial Crowdsourcing with Social Networks
+This repository contains the official PyTorch implementation for our paper: **"GKD-Recruiter: Jointly Modeling Social Influence and Physical Affinities for Spatial Crowdsourcing"** (Under Review for ICML 2026).
 
-## Overview
+## 💡 Overview
 
-This project implements **GKD-Recruiter**, a novel recruitment framework for spatial crowdsourcing that leverages social network information. The method combines **Heterogeneous Graph Neural Networks (GNNs)** with **Knowledge Distillation** (GKD) to optimize worker selection based on quality potential, task affinity, and social influence.
+Recruiting workers via social networks for spatial crowdsourcing presents unique challenges. Traditional Influence Maximization (IM) algorithms often fail due to the **Social-Physical Gap** (influential users may not be physically suitable for the task) and the **Saturation Trap** (tasks have strict capacity limits, rendering the objective function non-submodular).
 
-## Key Features
+GKD-Recruiter proposes a novel deep reinforcement learning framework that overcomes these limitations by:
 
-- **Heterogeneous Graph Modeling**: Captures complex relationships between workers, tasks, and social connections.
-- **Knowledge Distillation (GKD)**: Distills expert recruitment strategies (e.g., ComGreedy) into an efficient GNN-based reinforcement learning agent.
-- **Memory-Optimized GNN**: Custom implementation to handle large-scale social graphs on memory-constrained devices (e.g., Apple Silicon MPS).
-- **Scalable Baselines**: Inclusion of various Influence Maximization (IM) and Crowdsensing baselines for comprehensive evaluation.
+*   **Heterogeneous Graph Convolutional Networks (RGCN)**: Extracting structural features from both worker-worker social graphs and worker-task physical affinity graphs.
+*   **Influence Graph Attention Networks (IGAT)**: Anticipating social propagation paths to precisely evaluate expected task participation.
+*   **Graph Knowledge Distillation (GKD)**: Leveraging expert heuristic trajectories to bootstrap a Rainbow Dueling DQN agent, efficiently navigating the massive 30,000-dimensional action space and bypassing local optima.
 
-## Project Structure
+## 📂 Repository Structure
+
+The codebase is modularized for readability and reproducibility:
 
 ```text
 GKD-Recruiter/
-├── models/             # Core logic and architecture
-│   ├── gkd_env.py      # Spatial Crowdsourcing Environment
-│   ├── gkd_recruiter.py# Heterogeneous GNN (RGCN + GAT) Model
-│   └── evaluate.py     # Evaluation metrics (ETS, Coverage, etc.)
-├── scripts/            # Execution entry points
-│   ├── generate_expert_data.py # Expert strategy data collection
-│   └── train_gkd.py    # Distillation pre-training & RL fine-tuning
-├── baselines/          # Comparative algorithms
-│   ├── baselines_im.py # CELF, Degree Discount, TSIM
-│   ├── maim.py         # Multi-Agent Independent Models
-│   └── dqn_selector.py # Vanilla DQN benchmark
-├── data/               # Dataset and environment parameters
-│   ├── env_params/     # Simulation parameters
-│   └── model_inputs/   # Processed features and indices
-└── README.md
+├── data/                       # Datasets and environment parameters
+│   ├── env_params/             # Adjacency matrices, task demands, q/a matrices
+│   ├── model_inputs/           # Node and task initial features
+│   ├── source_data/            # Raw simulated spatial & social data
+│   ├── data_gen.py             # Script to synthesize the environment
+│   └── Readme.md               # Data description
+├── models/                     # Core neural network architectures
+│   ├── gkd_recruiter.py        # The RGCN + IGAT + Dueling DQN model
+│   ├── gkd_env.py              # RL Environment wrapper for spatial recruiting
+│   └── evaluate.py             # Monte Carlo simulator for accurate ETS calculation
+├── baselines/                  # Comprehensive baseline algorithms
+│   ├── baselines_heuristic.py  # ComGreedy, DegGreedy
+│   ├── baselines_im.py         # CELF (Cost-Effective Lazy Forward), NDD
+│   ├── dqn_selector.py         # Single-Agent RL
+│   └── maim.py                 # Multi-Agent RL
+├── scripts/                    # Execution and training scripts
+│   ├── generate_expert_data.py # Collect expert trajectories via ComGreedy
+│   └── train_gkd.py            # Phase 1: Knowledge Distillation -> Phase 2: RL Fine-tuning
+└── README.md                   # You are here!
 ```
 
-## Installation
+## ⚙️ Dependencies
 
-1. Clone the repository:
+This project is built with Python 3.x and PyTorch. The code is optimized to run on both CUDA GPUs and Apple Silicon (MPS).
+
 ```bash
-git clone https://github.com/GaoYucen/GKD-Recruiter.git
-cd GKD-Recruiter
+pip install torch networkx numpy tqdm
 ```
 
-2. Environment Setup (Recommended Python 3.11):
-```bash
-conda create -n py11 python=3.11
-conda activate py11
-# Install PyTorch (Compatible with MPS/CUDA)
-pip install torch torchvision torchaudio 
-# Install Dependencies
-pip install torch-geometric networkx numpy tqdm
-```
+## 🚀 Getting Started
 
-## Usage
+### 1. Generate Expert Data (Knowledge Distillation)
+To overcome the vast action space, GKD-Recruiter utilizes an expert-guided pre-training phase. First, generate the expert trajectories using the strong heuristic algorithm (ComGreedy):
 
-### 1. Data Preparation
-Ensure your environment parameters are placed in `data/env_params/`.
-
-### 2. Expert Knowledge Collection
-Collect expert trajectories (ComGreedy) for offline distillation:
 ```bash
 python scripts/generate_expert_data.py
 ```
+This will simulate 100 episodes and save the dynamic graph states and actions to `data/expert_data.pt`.
 
-### 3. Model Training
-Run knowledge distillation followed by reinforcement learning fine-tuning:
+### 2. Train GKD-Recruiter (End-to-End)
+Execute the main training script. This script automatically performs **Phase 1: Supervised Graph Knowledge Distillation** followed by **Phase 2: Reinforcement Learning Fine-tuning**:
+
 ```bash
 python scripts/train_gkd.py
 ```
+The script utilizes vectorized batch processing for efficient graph computations. The best model weights will be saved upon completion.
 
-### 4. Evaluation & Baselines
-Run baseline comparisons:
+### 3. Run Baselines
+To reproduce the baseline experiments and demonstrate the limitations of traditional algorithms (e.g., the Saturation Trap in CELF and the Social-Physical Gap in NDD), run the following scripts:
+
 ```bash
-python baselines/baselines_im.py
+# Run Heuristic Baselines
 python baselines/baselines_heuristic.py
+
+# Run Traditional Influence Maximization Baselines (CELF, NDD)
+python baselines/baselines_im.py
+
+# Run Vanilla RL / Multi-Agent Baselines
+python baselines/dqn_selector.py
+python baselines/maim.py
 ```
 
-## License
+## 📊 Evaluation Metrics
+
+The primary metric used to evaluate recruiting performance is **ETS (Effective Task Satisfaction)**, which measures the aggregated quality of recruited workers capped by the strict demand (capacity) of each task. Expected Influence Spread (number of activated nodes) is also recorded to illustrate the discrepancy between traditional IM goals and spatial crowdsourcing needs.
+
+## 📄 License
 MIT License
-
-
-- Recruitment effectiveness
-- Social influence coverage
-- Computational efficiency
-- Quality vs. cost trade-off
-
-## Citation
-
-If you use this code in your research, please cite:
-
-```
-@article{gao2024gkd,
-  title={GKD-Recruiter: Graph Neural Network and Distillation for Worker Recruitment in Spatial Crowdsourcing},
-  author={Gao, Yucen},
-  journal={ICML},
-  year={2024}
-}
-```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contact
-
-Gao Yucen - gyc@example.com
-
-Project Link: https://github.com/GaoYucen/GKD-Recruiter
-

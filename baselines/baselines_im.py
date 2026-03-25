@@ -12,8 +12,8 @@ import heapq
 from models.evaluate import GKDEvaluator
 
 def load_env_data(env_dir='data/env_params'):
-    """加载评估所需的环境真理数据"""
-    print(f"📂 正在加载环境数据 ({env_dir}/)...")
+    """Load ground truth data for environmental evaluation."""
+    print(f"📂 Loading environment data from ({env_dir}/)...")
     edge_index = np.loadtxt(os.path.join(env_dir, 'edge_index.txt'), dtype=int)
     w_ij = np.loadtxt(os.path.join(env_dir, 'w_ij.txt'), dtype=float)
     
@@ -33,69 +33,72 @@ def load_env_data(env_dir='data/env_params'):
 
 def run_ndd(G, q_matrix, worker_indices, K=50):
     """
-    NDD (Node Degree Decay): 带衰减的度中心性贪心
-    策略：选出预期影响力(出度权重和)最大的节点，随后对其邻居的影响力进行打折惩罚，避免重叠。
+    NDD (Node Degree Decay): Degree Centrality Greedy with Decay
+    Strategy: Select the node with the highest expected influence (sum of out-edge weights), 
+    then penalize the influence of its neighbors to avoid redundancy.
     """
-    print("\n[算法] 运行 NDD (Node Degree Decay)...")
+    print("\n[Baseline] Running NDD (Node Degree Decay)...")
     start_time = time.time()
     
-    # 初始化每个候选工人的预期出度影响力 (出边权重之和)
+    # Initialize the expected out-degree influence (sum of out-edge weights) for each candidate worker
     scores = {w: sum(G[w][v].get('weight', 0.1) for v in G.successors(w)) for w in worker_indices}
     seed_pairs = []
     
     for _ in range(K):
-        # 找出当前得分最高的节点
+        # Find the node with the current highest score
         if not scores: break
         best_w = max(scores, key=scores.get)
         
-        # 分配质量潜力最高的任务
+        # Assign the task with the highest quality potential
         w_idx = np.where(worker_indices == best_w)[0][0]
         best_task = int(np.argmax(q_matrix[w_idx]))
         seed_pairs.append((best_w, best_task))
         
-        # 从候选池中移除
+        # Remove from the candidate pool
         scores.pop(best_w)
         
-        # 核心机制：度数衰减 (打折其邻居的得分，因为该节点已被激活，其邻居被重复激活的边际价值降低)
+        # Core mechanism: Degree Decay (discount its neighbors' scores since this node is now activated, 
+        # lowering the marginal value of duplicate neighbor activation)
         for neighbor in G.successors(best_w):
             if neighbor in scores:
                 discount = G[best_w][neighbor].get('weight', 0.1)
                 scores[neighbor] = max(0, scores[neighbor] - discount)
                 
-    print(f"⏱️ 推断耗时: {time.time() - start_time:.4f}s")
+    print(f"⏱️ Inference Time: {time.time() - start_time:.4f}s")
     return seed_pairs
 
 def run_celf(G, q_matrix, a_matrix, task_demands, worker_indices, K=50, m=5):
     """
-    CELF (Cost-Effective Lazy Forward): 延迟贪心影响力最大化
-    策略：利用次模性假设（尽管当前环境是非次模的），通过优先队列减少边际收益的重复计算。
+    CELF (Cost-Effective Lazy Forward): Lazy Greedy Influence Maximization
+    Strategy: Utilize submodularity assumptions (despite the non-submodular environment) 
+    to reduce redundant marginal gain calculations via a priority queue.
     """
-    print(f"\n[算法] 运行 CELF (Cost-Effective Lazy Forward) ...")
-    print(f"⚠️  警告: CELF 运行极其缓慢。为了可行性，已将每个工人的任务候选池裁剪为 Top-{m}。")
+    print(f"\n[Baseline] Running CELF (Cost-Effective Lazy Forward) ...")
+    print(f"⚠️ Warning: CELF is extremely slow. For feasibility, each worker's task candidate pool is trimmed to Top-{m}.")
     start_time = time.time()
     
-    # 使用较少的 MC 模拟次数来加速 CELF 的内部评估 (仅用于选种阶段)
+    # Use fewer MC simulations to accelerate internal CELF evaluation (only for seeding phase)
     fast_evaluator = GKDEvaluator(G, q_matrix, a_matrix, task_demands, worker_indices, num_simulations=10)
     
-    # 1. 构建精简候选池 (只考虑每个工人最擅长的前 m 个任务)
+    # 1. Build a refined candidate pool (only consider the top m tasks for each worker)
     candidates = []
     for row_idx, w in enumerate(worker_indices):
-        # 综合兴趣和质量选出前 m 个任务
+        # Select top m tasks based on composite interest and quality
         scores = q_matrix[row_idx] * a_matrix[row_idx]
         top_tasks = np.argsort(scores)[-m:]
         for t in top_tasks:
             candidates.append((w, int(t)))
             
-    print(f"   => 候选对总数: {len(candidates)}")
+    print(f"   => Total candidate pairs: {len(candidates)}")
     
-    # 2. 第一轮 (First Pass) - 计算所有候选对的初始边际收益
-    print("   => 正在进行第 1 轮全量扫描 (最耗时的一步，请耐心等待...)")
+    # 2. First Pass: Calculate initial marginal gain for all candidate pairs
+    print("   => Performing Round 1 full scan (most time-consuming, please wait...)")
     heap = []
     for i, (w, t) in enumerate(candidates):
-        # 计算仅有这一个种子的 ETS
+        # Calculate ETS for this single seed only
         ets = fast_evaluator.evaluate([(w, t)])['Effective_Task_Satisfaction']
-        # Python 的 heapq 是最小堆，为了实现最大堆，我们将收益取负
-        heapq.heappush(heap, (-ets, w, t, 0)) # 0 表示这是在第 0 个种子时计算的收益
+        # Python's heapq is a min-heap; to implement a max-heap, we negate the gain
+        heapq.heappush(heap, (-ets, w, t, 0)) # 0 indicates this gain was calculated with 0 prior seeds
         
         if (i + 1) % 300 == 0:
             print(f"      进度: {i + 1} / {len(candidates)}")

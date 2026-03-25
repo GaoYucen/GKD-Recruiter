@@ -21,8 +21,8 @@ from models.gkd_env import GKDEnv
 
 class VanillaDQN(nn.Module):
     """
-    基础 DQN 网络 (Baseline: DQNSelector)
-    纯 MLP 架构，不包含任何 RGCN/IGAT 图结构信息
+    Basic DQN Network (Baseline: DQNSelector)
+    Pure MLP architecture, excluding any RGCN/IGAT graph structural information.
     """
     def __init__(self, state_dim, action_dim):
         super(VanillaDQN, self).__init__()
@@ -47,24 +47,24 @@ class ReplayBuffer:
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
-        return (torch.stack(states), torch.tensor(actions), 
-                torch.tensor(rewards, dtype=torch.float32), 
-                torch.stack(next_states), torch.tensor(dones, dtype=torch.float32))
+        return (torch.stack(states).to(device), torch.tensor(actions, device=device), 
+                torch.tensor(rewards, dtype=torch.float32, device=device), 
+                torch.stack(next_states).to(device), torch.tensor(dones, dtype=torch.float32, device=device))
     
     def __len__(self):
         return len(self.buffer)
 
 def train_dqn_selector(env, episodes=50, batch_size=64):
-    print("🚀 [Baseline] 开始训练 DQNSelector (无图结构的纯 MLP 强化学习)...")
+    print("🚀 [Baseline] Training DQNSelector (Pure MLP RL without graph structures)...")
     
-    # 状态维度：极简状态 (剩余预算比例 + 当前整体满意度) -> 维度为 2
+    # State space: Minimalist state (budget ratio + current satisfaction) -> dim = 2
     state_dim = 2 
-    # 动作维度：所有的 (worker, task) 组合
+    # Action space: All (worker, task) combinations
     action_dim = env.num_workers * env.num_tasks
     
-    # 声明网络
-    policy_net = VanillaDQN(state_dim, action_dim)
-    target_net = VanillaDQN(state_dim, action_dim)
+    # Initialize networks
+    policy_net = VanillaDQN(state_dim, action_dim).to(device)
+    target_net = VanillaDQN(state_dim, action_dim).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     
     optimizer = optim.Adam(policy_net.parameters(), lr=1e-3)
@@ -77,15 +77,15 @@ def train_dqn_selector(env, episodes=50, batch_size=64):
     gamma = 0.99
     
     for ep in range(episodes):
-        # Env 返回的状态我们需要构造成 state_dim = 2 的 Tensor
+        # Reset environment and construct initial state tensor
         _ = env.reset()
-        state = torch.tensor([1.0, 0.0], dtype=torch.float32) 
+        state = torch.tensor([1.0, 0.0], dtype=torch.float32, device=device) 
         
         ep_reward = 0
         done = False
         
         while not done:
-            # Epsilon-Greedy 探索
+            # Epsilon-Greedy exploration
             if random.random() < epsilon:
                 action = random.randint(0, action_dim - 1)
             else:
@@ -93,11 +93,11 @@ def train_dqn_selector(env, episodes=50, batch_size=64):
                     q_values = policy_net(state)
                     action = torch.argmax(q_values).item()
                     
-            # 步进环境
+            # Step environment
             _, reward, done, final_ets = env.step(action)
             ep_reward += reward
             
-            # 构造 next_state
+            # Construct next_state
             next_state = torch.tensor([1.0 - (env.current_step / env.budget_K), final_ets], dtype=torch.float32)
             
             # 存入 Buffer

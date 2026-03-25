@@ -15,12 +15,12 @@ root_path = str(Path(__file__).resolve().parent.parent)
 if root_path not in sys.path:
     sys.path.append(root_path)
 
-# 导入模型与环境
+# Import models and environment
 from models.gkd_env import GKDEnv
 from models.gkd_recruiter import GKDRecruiterModel
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-print(f"⚡️ 当前计算后端: {device}")
+print(f"⚡️ Current Compute Backend: {device}")
 
 class GraphReplayBuffer:
     def __init__(self, capacity=5000):
@@ -32,13 +32,12 @@ class GraphReplayBuffer:
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
         w_f, t_f, act, rew, nw_f, nt_f, don = zip(*batch)
-        # 将整个 Batch 一次性转为 Tensor，这是提速的关键
+        # Convert batch to tensor for acceleration
         return (torch.stack(w_f).to(device), torch.stack(t_f).to(device), 
                 torch.tensor(act, device=device), torch.tensor(rew, dtype=torch.float32, device=device), 
                 torch.stack(nw_f).to(device), torch.stack(nt_f).to(device), 
                 torch.tensor(don, dtype=torch.float32, device=device))
     
-    # 🌟 请在这里补上这两行：
     def __len__(self):
         return len(self.buffer)
 
@@ -47,7 +46,7 @@ class GKDGraphWrapper:
         self.env = env
         self.num_nodes = env.G.number_of_nodes()
         self.num_tasks = env.num_tasks
-        # 预先转为 Tensor 并固定在 device 上，避免每一轮都转换
+        # Pre-convert and fix to device to avoid redundant overhead
         self.ww_adj = torch.tensor(nx.to_numpy_array(env.G), dtype=torch.float32, device=device)
         self.wt_adj_full = torch.zeros(self.num_nodes, self.num_tasks, device=device)
         self.wt_adj_full[env.worker_indices] = torch.tensor(env.q_matrix * env.a_matrix, dtype=torch.float32, device=device)
@@ -67,30 +66,30 @@ class GKDGraphWrapper:
 from torch.utils.data import TensorDataset, DataLoader
 
 def pretrain_with_distillation(model, wrapper, worker_idx_tensor, data_path='data/expert_data.pt', epochs=15, batch_size=4):
-    print(f"\n🎓 启动 GKD 知识蒸馏预训练 (加载专家数据: {data_path})...")
+    print(f"\n🎓 Starting GKD Knowledge Distillation Pre-training (Loading: {data_path})...")
     if not os.path.exists(data_path):
-        raise FileNotFoundError(f"找不到专家数据 {data_path}，请先运行 generate_expert_data.py")
+        raise FileNotFoundError(f"Expert data not found: {data_path}. Please run generate_expert_data.py first.")
         
-    # 1. 加载数据
+    # 1. Load data
     expert_data = torch.load(data_path, weights_only=True)
     dataset = TensorDataset(expert_data['w_states'], expert_data['t_states'], expert_data['actions'])
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.CrossEntropyLoss() # 将 Q 值预测转化为多分类问题
+    criterion = nn.CrossEntropyLoss() # Convert Q-value prediction to multi-class classification problem
     
     model.train()
     for epoch in range(epochs):
         total_loss = 0
-        # 遍历专家经验池
+        # Iterate over replay buffer
         for b_w, b_t, b_act in dataloader:
             b_w, b_t, b_act = b_w.to(device), b_t.to(device), b_act.to(device)
             
             optimizer.zero_grad()
-            # 模型输出全量 Q 值 [Batch, 30000]
+            # Model outputs full Q-values [Batch, 30000]
             q_values = model(b_w, b_t, wrapper.ww_adj, wrapper.wt_adj_full, worker_idx_tensor)
             
-            # 计算交叉熵损失 (让专家选择的动作的 Q 值远大于其他动作)
+            # Cross Entropy Loss (ensuring expert actions have significantly higher Q-values)
             loss = criterion(q_values, b_act)
             loss.backward()
             optimizer.step()
@@ -98,14 +97,14 @@ def pretrain_with_distillation(model, wrapper, worker_idx_tensor, data_path='dat
             
         print(f"   Distillation Epoch {epoch+1:02d}/{epochs} | Loss: {total_loss/len(dataloader):.4f}")
         
-    print("✅ 预训练完成！GKD-Recruiter 已具备专家的基础常识。")
+    print("✅ Pre-training complete! GKD-Recruiter now possesses baseline expert knowledge.")
     return model
 
 # def train_gkd_agent(episodes=50, batch_size=16, update_every=5):
 #     env = GKDEnv(env_dir='data/env_params')
 #     wrapper = GKDGraphWrapper(env)
     
-#     # 🌟 修复关键：在此处定义全图索引，供模型切片使用
+#     # 🌟 Fix: Define global graph indices for model slicing
 #     worker_idx_tensor = torch.tensor(env.worker_indices, dtype=torch.long, device=device)
     
 #     model = GKDRecruiterModel(feature_dim=17, hidden_dim=64).to(device)
@@ -119,18 +118,18 @@ def pretrain_with_distillation(model, wrapper, worker_idx_tensor, data_path='dat
 #     gamma = 0.99
 #     global_step = 0
 
-# 修改函数签名，接收预训练模型和环境参数
+# Modify function signature to receive pre-trained model and environment parameters
 def train_gkd_agent(model, env, wrapper, worker_idx_tensor, episodes=50, batch_size=16, update_every=5, initial_epsilon=0.1):
-    print("\n🚀 启动 RL 强化微调 (探索未知领域以超越专家)...")
+    print("\n🚀 Starting RL Fine-tuning (Exploring to surpass expert performance)...")
     
     target_net = GKDRecruiterModel(feature_dim=17, hidden_dim=64).to(device)
     target_net.load_state_dict(model.state_dict())
     
-    # 降低学习率进行微调
+    # Lower learning rate for fine-tuning
     optimizer = optim.Adam(model.parameters(), lr=5e-5) 
     buffer = GraphReplayBuffer()
     
-    # Epsilon 从较低的值开始 (比如 0.1)
+    # Epsilon starts from a lower value (e.g., 0.1)
     epsilon, epsilon_min, decay = initial_epsilon, 0.01, 0.95
     gamma = 0.99
     global_step = 0
@@ -142,12 +141,12 @@ def train_gkd_agent(model, env, wrapper, worker_idx_tensor, episodes=50, batch_s
         
         while not done:
             global_step += 1
-            # 1. 探索与决策
+            # 1. Exploration and Decision Making
             if random.random() < epsilon:
                 action = random.randint(0, env.num_workers * env.num_tasks - 1)
             else:
                 with torch.no_grad():
-                    # 增加 Batch 维度进行推理 [1, 3000, 17]
+                    # Add Batch dimension for inference [1, 3000, 17]
                     q_vals = model(w_f.unsqueeze(0), t_f.unsqueeze(0), wrapper.ww_adj, wrapper.wt_adj_full, worker_idx_tensor)
                     action = torch.argmax(q_vals.view(-1)).item()
             
@@ -156,15 +155,15 @@ def train_gkd_agent(model, env, wrapper, worker_idx_tensor, episodes=50, batch_s
             buffer.push(w_f, t_f, action, reward, nw_f, nt_f, done)
             w_f, t_f = nw_f, nt_f
 
-            # 2. 向量化 Batch 更新 (性能核心优化)
+            # 2. Vectorized Batch Update (Performance core optimization)
             if len(buffer) > batch_size and global_step % update_every == 0:
                 b_w, b_t, b_act, b_rew, b_nw, b_nt, b_don = buffer.sample(batch_size)
                 
-                # 一次性计算全 Batch 的 Q 值 [Batch, 30000]
+                # Calculate Q-values for the entire Batch [Batch, 30000]
                 q_all = model(b_w, b_t, wrapper.ww_adj, wrapper.wt_adj_full, worker_idx_tensor)
                 current_q = q_all.gather(1, b_act.unsqueeze(1)).squeeze(1)
                 
-                # 一次性计算 Target Q 值
+                # Calculate Target Q-values
                 with torch.no_grad():
                     next_q_all = target_net(b_nw, b_nt, wrapper.ww_adj, wrapper.wt_adj_full, worker_idx_tensor)
                     max_next_q = next_q_all.max(dim=1)[0]
@@ -175,10 +174,11 @@ def train_gkd_agent(model, env, wrapper, worker_idx_tensor, episodes=50, batch_s
                 loss.backward()
                 optimizer.step()
 
-        # 更新策略
+        # Update strategy
         if ep % 5 == 0:
             target_net.load_state_dict(model.state_dict())
-            torch.mps.empty_cache() # 及时释放显存
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache() # Release memory
         
         epsilon = max(epsilon_min, epsilon * decay)
         print(f"   Episode {ep+1:02d} | ETS: {final_ets:.4f} | Epsilon: {epsilon:.2f} | Buffer: {len(buffer)}")
@@ -188,15 +188,15 @@ def train_gkd_agent(model, env, wrapper, worker_idx_tensor, episodes=50, batch_s
 
 
 if __name__ == "__main__":
-    # 1. 初始化统一的环境和包装器
+    # 1. Initialize unified environment and wrapper
     env = GKDEnv(env_dir='data/env_params')
     wrapper = GKDGraphWrapper(env)
     worker_idx_tensor = torch.tensor(env.worker_indices, dtype=torch.long, device=device)
     
-    # 2. 实例化一个全新的模型
+    # 2. Instantiate a fresh model
     gkd_model = GKDRecruiterModel(feature_dim=17, hidden_dim=64).to(device)
     
-    # 🌟 阶段一：图知识蒸馏 (Knowledge Distillation)
+    # 🌟 Phase 1: Graph Knowledge Distillation (Pre-training)
     gkd_model = pretrain_with_distillation(gkd_model, wrapper, worker_idx_tensor, epochs=15)
     
     # 🌟 阶段二：强化学习微调 (RL Fine-tuning)

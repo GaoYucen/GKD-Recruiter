@@ -16,28 +16,28 @@ from models.gkd_env import GKDEnv
 
 class IndependentAgent:
     """
-    独立的局部智能体 (代表 MAIM 中的一个子节点)
-    每个 Agent 只负责招募自己管辖范围内的任务
+    Independent Local Agent (representing a sub-node in MAIM).
+    Each agent is responsible for task recruitment within its assigned jurisdiction.
     """
     def __init__(self, agent_id, state_dim, num_workers, task_indices):
         self.agent_id = agent_id
         self.task_indices = task_indices
-        self.action_dim = num_workers * len(task_indices) # 只能把工人派给自己的任务
+        self.action_dim = num_workers * len(task_indices) # Can only assign workers to its own tasks
         
-        self.policy_net = VanillaDQN(state_dim, self.action_dim)
-        self.target_net = VanillaDQN(state_dim, self.action_dim)
+        self.policy_net = VanillaDQN(state_dim, self.action_dim).to(device)
+        self.target_net = VanillaDQN(state_dim, self.action_dim).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=1e-3)
         self.buffer = ReplayBuffer(capacity=5000)
 
 def train_maim_lite(env, num_agents=5, episodes=50, batch_size=32):
-    print(f"🚀 [Baseline] 开始训练 MAIM (多智能体强化学习, Agents={num_agents})...")
+    print(f"🚀 [Baseline] Training MAIM (Multi-Agent Reinforcement Learning, Agents={num_agents})...")
     
     state_dim = 2
     tasks_per_agent = env.num_tasks // num_agents
     
-    # 实例化多个独立智能体
+    # Instantiate multiple independent agents
     agents = []
     for i in range(num_agents):
         task_subset = list(range(i * tasks_per_agent, (i + 1) * tasks_per_agent))
@@ -49,18 +49,18 @@ def train_maim_lite(env, num_agents=5, episodes=50, batch_size=32):
     
     for ep in range(episodes):
         _ = env.reset()
-        state = torch.tensor([1.0, 0.0], dtype=torch.float32)
+        state = torch.tensor([1.0, 0.0], dtype=torch.float32, device=device)
         done = False
         
-        # 记录每个智能体的累计 Reward (为了打印)
+        # Track cumulative reward for each agent (for logging)
         ep_rewards = [0] * num_agents
         
         while not done:
-            # 轮流执行 (Round-Robin)：模拟去中心化决策
+            # Round-Robin execution: Simulating decentralized decision-making
             for agent in agents:
                 if done: break
                 
-                # Agent i 做出决策
+                # Agent decision making
                 if random.random() < epsilon:
                     local_action = random.randint(0, agent.action_dim - 1)
                 else:
@@ -68,18 +68,18 @@ def train_maim_lite(env, num_agents=5, episodes=50, batch_size=32):
                         q_vals = agent.policy_net(state)
                         local_action = torch.argmax(q_vals).item()
                 
-                # 解码局部动作到全局动作
+                # Decode local action to global action index
                 w_idx = local_action // len(agent.task_indices)
                 local_t_idx = local_action % len(agent.task_indices)
                 global_task_id = agent.task_indices[local_t_idx]
                 global_action = w_idx * env.num_tasks + global_task_id
                 
-                # 环境步进
+                # Step environment
                 _, reward, done, final_ets = env.step(global_action)
                 ep_rewards[agent.agent_id] += reward
-                next_state = torch.tensor([1.0 - (env.current_step / env.budget_K), final_ets], dtype=torch.float32)
+                next_state = torch.tensor([1.0 - (env.current_step / env.budget_K), final_ets], dtype=torch.float32, device=device)
                 
-                # 经验存储与更新
+                # Experience storage and update
                 agent.buffer.push(state, local_action, reward, next_state, done)
                 
                 if len(agent.buffer) > batch_size:
@@ -95,7 +95,7 @@ def train_maim_lite(env, num_agents=5, episodes=50, batch_size=32):
                 
                 state = next_state
         
-        # Target 网络更新
+        # Target network update
         if ep % 5 == 0:
             for agent in agents:
                 agent.target_net.load_state_dict(agent.policy_net.state_dict())

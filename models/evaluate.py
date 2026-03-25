@@ -13,21 +13,18 @@ class GKDEvaluator:
         self.num_nodes = social_graph.number_of_nodes() # 3000
         self.num_tasks = q_matrix.shape[1] # 100
         
-        # ---------------------------------------------------------
-        # 【核心修复】：将 300x100 的局部矩阵对齐到 3000 个全局节点
-        # ---------------------------------------------------------
+        # Align local 300x100 matrix with 3000 global nodes
         self.full_q_matrix = np.zeros((self.num_nodes, self.num_tasks))
         self.full_a_matrix = np.zeros((self.num_nodes, self.num_tasks))
         
-        # 1. 计算 300 个候选工人的均值，用来作为 2700 个普通大众的默认属性
-        # （假设普通社交用户被影响后，其参与意愿和质量服从平均水平）
+        # 1. Compute mean attributes for 300 candidate workers to serve as defaults for other nodes
         avg_q = np.mean(q_matrix, axis=0)
         avg_a = np.mean(a_matrix, axis=0)
         
         self.full_q_matrix[:] = avg_q
         self.full_a_matrix[:] = avg_a
         
-        # 2. 将 300 个候选工人的专属真实数据，覆盖到他们对应的节点 ID 上
+        # 2. Map real data for the 300 candidate workers to their corresponding node IDs
         for row_idx, node_id in enumerate(worker_indices):
             self.full_q_matrix[node_id] = q_matrix[row_idx]
             self.full_a_matrix[node_id] = a_matrix[row_idx]
@@ -52,7 +49,7 @@ class GKDEvaluator:
 
             expected_quality = self._simulate_task_aware_ic(task_id, seeds)
             
-            # 论文公式 (4): 满足需求即截断
+            # Equation (4) in the paper: Truncate output which satisfies the demand
             demand = self.task_demands[task_id]
             ets = min(expected_quality / demand, 1.0)
 
@@ -84,7 +81,7 @@ class GKDEvaluator:
                     for neighbor in self.G.successors(node): 
                         if neighbor not in activated:
                             w_ij = self.G[node][neighbor].get('weight', 0.1)
-                            # 使用扩充后的 full_a_matrix，确保不会越界
+                            # Use augmented full_a_matrix to avoid index error
                             a_jl = self.full_a_matrix[neighbor, task_id]
                             p_ij_t = w_ij * a_jl
 
@@ -94,7 +91,7 @@ class GKDEvaluator:
                 newly_activated = next_activated
                 activated.update(newly_activated)
 
-            # 使用扩充后的 full_q_matrix
+            # Use augmented full_q_matrix
             sim_quality = sum(self.full_q_matrix[node, task_id] for node in activated)
             total_quality += sim_quality
 

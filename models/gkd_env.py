@@ -5,7 +5,7 @@ import os
 from .evaluate import GKDEvaluator
 
 class GKDEnv:
-    def __init__(self, env_dir='data/env_params', budget_K=50): # 注意这里的路径，根据您的实际目录调整
+    def __init__(self, env_dir='data/env_params', budget_K=50): # Note: adjust the path according to your actual directory structure
         self.budget_K = budget_K
         self.q_matrix = np.loadtxt(os.path.join(env_dir, 'q_matrix.txt'))
         self.a_matrix = np.loadtxt(os.path.join(env_dir, 'a_matrix.txt'))
@@ -17,7 +17,7 @@ class GKDEnv:
         self.G = nx.DiGraph()
         self.G.add_edges_from([(edge_index[i][0], edge_index[i][1], {'weight': w_ij[i]}) for i in range(len(w_ij))])
         
-        # 训练时使用少量模拟(5次)加速
+        # Accelerate training using a small number of simulations (5 times)
         self.evaluator = GKDEvaluator(self.G, self.q_matrix, self.a_matrix, self.task_demands, self.worker_indices, num_simulations=5)
         
         self.num_workers = len(self.worker_indices)
