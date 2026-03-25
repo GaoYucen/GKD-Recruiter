@@ -5,6 +5,7 @@ root_path = str(Path(__file__).resolve().parent.parent)
 if root_path not in sys.path:
     sys.path.append(root_path)
 
+import os
 import torch
 import numpy as np
 from tqdm import tqdm # 用于显示进度条

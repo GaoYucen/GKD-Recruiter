@@ -4,57 +4,34 @@ GKD-Recruiter: A Graph Neural Network and Distillation-based Framework for Worke
 
 ## Overview
 
-This project implements GKD-Recruiter, a novel approach for recruiting workers in spatial crowdsourcing scenarios that leverages social network information. The method combines Graph Neural Networks (GNNs) with knowledge distillation to optimize worker selection based on quality potential, task affinity, and social influence.
+This project implements **GKD-Recruiter**, a novel recruitment framework for spatial crowdsourcing that leverages social network information. The method combines **Heterogeneous Graph Neural Networks (GNNs)** with **Knowledge Distillation** (GKD) to optimize worker selection based on quality potential, task affinity, and social influence.
 
 ## Key Features
 
-- **Heterogeneous Graph Modeling**: Models workers, tasks, and social relationships using heterogeneous graphs
-- **Quality Potential Estimation**: Uses spatial distance to estimate worker quality for tasks
-- **Task Affinity Learning**: Incorporates historical visit patterns and task rewards
-- **Social Influence Propagation**: Leverages social network diffusion for better recruitment
-- **Knowledge Distillation**: Distills knowledge from complex GNN models to efficient recruitment strategies
+- **Heterogeneous Graph Modeling**: Captures complex relationships between workers, tasks, and social connections.
+- **Knowledge Distillation (GKD)**: Distills expert recruitment strategies (e.g., ComGreedy) into an efficient GNN-based reinforcement learning agent.
+- **Memory-Optimized GNN**: Custom implementation to handle large-scale social graphs on memory-constrained devices (e.g., Apple Silicon MPS).
+- **Scalable Baselines**: Inclusion of various Influence Maximization (IM) and Crowdsensing baselines for comprehensive evaluation.
 
-## Dataset
+## Project Structure
 
-The project uses the Gowalla dataset for evaluation, which contains real-world check-in data from location-based social networks.
-
-### Data Structure
-
-- **Social Graph**: User-user social connections
-- **Spatial Data**: Worker and task locations in 2D space
-- **Task Attributes**: Rewards, demands, and features
-- **Worker Attributes**: Quality potentials, affinities, and features
-
-### Generated Sample Data
-
-Synthetic data can be generated using `data/data_gen_2.py`, which creates:
-
-- Node features (3000 users × 64 dimensions)
-- Edge indices and weights for social graph
-- Worker and task features
-- Heterogeneous graph structures
-- Similarity matrices and quality metrics
-
-Data is saved in `data/sample/` as `.txt` files.
-
-## Code Structure
-
-```
-code/
-├── README.md
-├── RainbowGD.ipynb          # Main implementation (Colab notebook)
-├── RainbowGD.py             # Main Python script
-├── baselines-RainbowGD/     # Baseline methods
-│   ├── IMBaseline/          # Influence Maximization baselines
-│   └── crowdsensingBaseline/# Crowdsensing-specific baselines
-├── data/                    # Data generation and processing
-│   ├── data_gen.py          # Original data generator
-│   ├── data_gen_2.py        # Enhanced data generator
-│   ├── Gowalla/             # Real dataset
-│   └── sample/              # Generated sample data
-├── ec_func.py               # Evaluation functions
-├── rl_ec.py                 # Reinforcement learning components
-└── random_base.py           # Random baseline
+```text
+GKD-Recruiter/
+├── models/             # Core logic and architecture
+│   ├── gkd_env.py      # Spatial Crowdsourcing Environment
+│   ├── gkd_recruiter.py# Heterogeneous GNN (RGCN + GAT) Model
+│   └── evaluate.py     # Evaluation metrics (ETS, Coverage, etc.)
+├── scripts/            # Execution entry points
+│   ├── generate_expert_data.py # Expert strategy data collection
+│   └── train_gkd.py    # Distillation pre-training & RL fine-tuning
+├── baselines/          # Comparative algorithms
+│   ├── baselines_im.py # CELF, Degree Discount, TSIM
+│   ├── maim.py         # Multi-Agent Independent Models
+│   └── dqn_selector.py # Vanilla DQN benchmark
+├── data/               # Dataset and environment parameters
+│   ├── env_params/     # Simulation parameters
+│   └── model_inputs/   # Processed features and indices
+└── README.md
 ```
 
 ## Installation
@@ -65,39 +42,43 @@ git clone https://github.com/GaoYucen/GKD-Recruiter.git
 cd GKD-Recruiter
 ```
 
-2. Install dependencies:
+2. Environment Setup (Recommended Python 3.11):
 ```bash
 conda create -n py11 python=3.11
 conda activate py11
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-pip install torch-geometric
-pip install networkx numpy matplotlib wandb
+# Install PyTorch (Compatible with MPS/CUDA)
+pip install torch torchvision torchaudio 
+# Install Dependencies
+pip install torch-geometric networkx numpy tqdm
 ```
 
 ## Usage
 
-### Data Generation
+### 1. Data Preparation
+Ensure your environment parameters are placed in `data/env_params/`.
 
-Generate synthetic data:
+### 2. Expert Knowledge Collection
+Collect expert trajectories (ComGreedy) for offline distillation:
 ```bash
-cd data
-python data_gen_2.py
+python scripts/generate_expert_data.py
 ```
 
-### Running the Model
-
-Open `RainbowGD.ipynb` in Google Colab or Jupyter Notebook and run the cells.
-
-For local execution:
+### 3. Model Training
+Run knowledge distillation followed by reinforcement learning fine-tuning:
 ```bash
-python RainbowGD.py
+python scripts/train_gkd.py
 ```
 
-### Baselines
+### 4. Evaluation & Baselines
+Run baseline comparisons:
+```bash
+python baselines/baselines_im.py
+python baselines/baselines_heuristic.py
+```
 
-Run baseline methods from `baselines-RainbowGD/` directory.
+## License
+MIT License
 
-## Evaluation Metrics
 
 - Recruitment effectiveness
 - Social influence coverage
