@@ -8,9 +8,16 @@ import torch.optim as optim
 from collections import deque
 import networkx as nx
 
-# 导入模型与环境 (请确保路径正确)
-from gkd_env import GKDEnv
-from gkd_recruiter import GKDRecruiterModel
+import sys
+from pathlib import Path
+# 自动将项目根目录加入搜索路径，确保跨文件夹 import 能通
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
+# 导入模型与环境
+from models.gkd_env import GKDEnv
+from models.gkd_recruiter import GKDRecruiterModel
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"⚡️ 当前计算后端: {device}")

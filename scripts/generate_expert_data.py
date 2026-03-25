@@ -1,11 +1,18 @@
-import os
+import sys
+from pathlib import Path
+# 自动将项目根目录加入搜索路径
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
 import torch
 import numpy as np
 from tqdm import tqdm # 用于显示进度条
 import networkx as nx
 
-# 导入我们已经写好的环境和特征包装器
-from train_gkd import GKDEnv, GKDGraphWrapper
+# 导入已经写好的环境和特征包装器
+from models.gkd_env import GKDEnv
+from scripts.train_gkd import GKDGraphWrapper
 
 def generate_comgreedy_expert_data(num_episodes=100, save_path='data/expert_data.pt'):
     print(f"🎓 开始收集 ComGreedy 专家数据 (总轮数: {num_episodes})...")
@@ -13,7 +20,7 @@ def generate_comgreedy_expert_data(num_episodes=100, save_path='data/expert_data
     # 初始化环境
     env = GKDEnv(env_dir='data/env_params')
     # 强制将 Wrapper 的设备设为 cpu，避免在生成海量数据时把 MPS 显存撑爆
-    import train_gkd
+    from scripts import train_gkd
     train_gkd.device = torch.device("cpu") 
     wrapper = GKDGraphWrapper(env)
     # 由于我们在独立脚本中，手动重置一下 wrapper 的内部 tensor 到 CPU

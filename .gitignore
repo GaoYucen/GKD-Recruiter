@@ -2,5 +2,6 @@ data/*.pt
 data/*.pth
 log/
 **/__pycache__/
-code/trash/
+trash/
 .DS_Store
+code/

@@ -1,9 +1,15 @@
+import sys
+from pathlib import Path
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
 import numpy as np
 import networkx as nx
 import time
 import os
 import heapq
-from evaluate import GKDEvaluator
+from models.evaluate import GKDEvaluator
 
 def load_env_data(env_dir='data/env_params'):
     """加载评估所需的环境真理数据"""

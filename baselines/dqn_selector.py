@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,10 +11,9 @@ import torch.optim as optim
 import random
 from collections import deque
 import os
-import sys
 
 # 在文件最上方确保导入了环境
-from gkd_env import GKDEnv
+from models.gkd_env import GKDEnv
 
 # 假设 GKDEnv 已经定义在上一级目录或环境变量中可用
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -2,7 +2,7 @@
 import numpy as np
 import networkx as nx
 import os
-from evaluate import GKDEvaluator
+from .evaluate import GKDEvaluator
 
 class GKDEnv:
     def __init__(self, env_dir='data/env_params', budget_K=50): # 注意这里的路径，根据您的实际目录调整

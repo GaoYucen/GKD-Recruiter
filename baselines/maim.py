@@ -1,13 +1,18 @@
+import sys
+from pathlib import Path
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
 import numpy as np
 import torch
 import torch.optim as optim
 import random
 import os
-import sys
 
 # 假设 VanillaDQN 和 ReplayBuffer 已经可以从上一个文件导入，这里为了完整性直接简写逻辑
-from dqn_selector import VanillaDQN, ReplayBuffer
-from gkd_env import GKDEnv
+from .dqn_selector import VanillaDQN, ReplayBuffer
+from models.gkd_env import GKDEnv
 
 class IndependentAgent:
     """
