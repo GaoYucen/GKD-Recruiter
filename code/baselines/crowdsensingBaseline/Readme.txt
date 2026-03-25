@@ -1,0 +1,1 @@
+Directly run NaiveFast_.py, other files will be called directly, the baselines automatically runnedd are CovGreedy, DegGreedy and NaiveFast.
