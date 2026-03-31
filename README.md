@@ -6,9 +6,7 @@ GKD-Recruiter is a task-aware worker recruitment framework designed to maximize 
 
 ## 📊 Datasets
 
-The experiments are conducted on sampled subgraphs from two real-world Location-Based Social Networks (LBSNs). For clarity in reproducing the results from the paper, please note the following configuration mapping:
-* Configurations using **$|V|=3000$** are evaluated on the **Brightkite** dataset.
-* Configurations using **$|V|=5000$** are evaluated on the **Gowalla** dataset.
+The experiments are conducted on sampled subgraphs from two real-world Location-Based Social Networks (LBSNs).
 
 ## 📂 Repository Structure
 
