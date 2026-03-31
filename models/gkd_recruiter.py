@@ -46,24 +46,57 @@ class IGATLayer(nn.Module):
         
         h_prime = torch.matmul(attention, Wh) 
         return F.elu(h_prime)
+    
+class GatingFusionLayer(nn.Module):
+    def __init__(self, hidden_dim):
+        super(GatingFusionLayer, self).__init__()
+        # Linear layers for computing gating weights
+        self.W_s = nn.Linear(hidden_dim * 3, hidden_dim)
+        self.W_rc = nn.Linear(hidden_dim * 3, hidden_dim)
+        self.W_n = nn.Linear(hidden_dim * 3, hidden_dim)
+
+    def forward(self, h_s, h_rc, h_n):
+        # Concatenate features from three views to determine gating weights
+        cat_h = torch.cat([h_s, h_rc, h_n], dim=-1)
+        
+        G_s = torch.sigmoid(self.W_s(cat_h))
+        G_rc = torch.sigmoid(self.W_rc(cat_h))
+        G_n = torch.sigmoid(self.W_n(cat_h))
+        
+        h_f = G_s * h_s + G_rc * h_rc + G_n * h_n
+        return h_f
 
 class GKDFeatureExtractor(nn.Module):
     def __init__(self, feature_dim, hidden_dim):
         super(GKDFeatureExtractor, self).__init__()
         self.worker_proj = nn.Linear(feature_dim, hidden_dim)
         self.task_proj = nn.Linear(feature_dim, hidden_dim)
+        
         self.rgcn = HeteroRGCNLayer(hidden_dim, hidden_dim)
         self.igat = IGATLayer(hidden_dim, hidden_dim)
+        self.fusion = GatingFusionLayer(hidden_dim)
 
     def forward(self, raw_worker_x, raw_task_x, ww_adj, wt_adj):
         h_w = F.relu(self.worker_proj(raw_worker_x))
         h_t = F.relu(self.task_proj(raw_task_x))
-        h_w_rgcn, h_t_rgcn = self.rgcn(h_w, h_t, ww_adj, wt_adj)
-        h_w_igat = self.igat(h_w_rgcn, ww_adj)
         
-        final_worker_embed = h_w_igat + h_w 
-        final_task_embed = h_t_rgcn + h_t
-        return final_worker_embed, final_task_embed
+        # 1. Task View (Worker-Task Graph) -> Student 1
+        h_w_rc, h_t_rc = self.rgcn(h_w, h_t, ww_adj, wt_adj)
+        
+        # 2. Social View (Social Graph) -> Student 2
+        h_w_s = self.igat(h_w, ww_adj)
+        
+        # 3. Aggregate neighbor node features (Mean(h_{N_i}^{rc}) in Eq. 10)
+        # Use matrix multiplication to calculate the average feature of neighbors
+        degree = ww_adj.sum(dim=-1, keepdim=True).clamp(min=1e-5)
+        h_w_n = torch.matmul(ww_adj, h_w_rc) / degree
+        
+        # 4. Teacher View (Fused Features)
+        h_w_f = self.fusion(h_w_s, h_w_rc, h_w_n)
+        
+        # Return all views to facilitate KD Loss calculation during pre-training
+        # During inference/RL phases, we only take h_w_f and h_t_rc
+        return h_w_s, h_w_rc, h_w_f, h_t_rc
     
 class DuelingQNetwork(nn.Module):
     def __init__(self, hidden_dim):
@@ -114,23 +147,44 @@ class GKDRecruiterModel(nn.Module):
         self.extractor = GKDFeatureExtractor(feature_dim, hidden_dim)
         self.q_net = DuelingQNetwork(hidden_dim)
     
-    def forward(self, raw_node_x, raw_task_x, ww_adj, wt_adj, worker_indices):
-        node_embeds, task_embeds = self.extractor(raw_node_x, raw_task_x, ww_adj, wt_adj)
+    def forward(self, raw_node_x, raw_task_x, ww_adj, wt_adj, worker_indices, return_extra=False):
+        """
+        GKD-Recruiter forward pass.
         
-        # 🌟 修复此处：必须加上切片的前缀 `:`, 以保证切的是 Node 维度而不是 Batch 维度
-        worker_embeds = node_embeds[:, worker_indices, :]
+        Args:
+            raw_node_x: Raw worker features [Batch, Num_W, Feat_Dim]
+            raw_task_x: Raw task features [Batch, Num_T, Feat_Dim]
+            ww_adj: Social network adjacency matrix
+            wt_adj: Worker-task heterogeneous graph adjacency matrix
+            worker_indices: Candidate worker indices for current step
+            return_extra: Whether to return extra view features for KD Loss calculation (Stage 1 training)
+        """
+        # 1. Extract feature representations for all views (Sections 4.1, 4.2, 4.3 in the paper)
+        # h_w_s: Social View (Student 1), h_w_rc: Task Relation View (Student 2)
+        # h_w_f: Distilled Fusion View (Teacher), h_t_rc: Task representation
+        h_w_s, h_w_rc, h_w_f, h_t_rc = self.extractor(raw_node_x, raw_task_x, ww_adj, wt_adj)
         
-        q_values = self.q_net(worker_embeds, task_embeds)
-        # 🌟 修复此处：移除 .squeeze()，确保输出严格保持 [Batch, Action] 形状
+        # 2. Extract worker embeddings based on candidate indices
+        # In RL phase, we use distilled fusion features h_w_f as they provide robust decision info
+        worker_embeds = h_w_f[:, worker_indices, :]
+        
+        # 3. Compute action scores using Q-network (Section 4.4 in the paper)
+        # q_values shape: [Batch, len(worker_indices) * Num_T]
+        q_values = self.q_net(worker_embeds, h_t_rc)
+        
+        # If return_extra is True, return all view features for KD Loss calculation (Eq. 11)
+        if return_extra:
+            return q_values, h_w_s, h_w_rc, h_w_f
+        
         return q_values
 
-# 简单的模块测试
+# Simple module test
 if __name__ == "__main__":
-    print("🧠 正在测试 GKD-Recruiter 的 Batch 维度大脑...")
+    print("🧠 Testing GKD-Recruiter architecture with batch dimension...")
     batch, num_w, num_t, f_dim, h_dim = 16, 3000, 100, 17, 64
     candidate_indices = torch.randint(0, num_w, (300,))
     
-    # 模拟输入数据 [Batch, N, Dim]
+    # Mock input data [Batch, N, Dim]
     dummy_w_x = torch.randn(batch, num_w, f_dim)
     dummy_t_x = torch.randn(batch, num_t, f_dim)
     dummy_ww_adj = torch.rand(num_w, num_w) * (torch.rand(num_w, num_w) > 0.95).float() 
@@ -139,4 +193,4 @@ if __name__ == "__main__":
     model = GKDRecruiterModel(feature_dim=f_dim, hidden_dim=h_dim)
     q_vals = model(dummy_w_x, dummy_t_x, dummy_ww_adj, dummy_wt_adj, candidate_indices)
     
-    print(f"✅ 成功! 输出 Q 值维度: {q_vals.shape} (预期: [{batch}, {300 * num_t}])")
+    print(f"✅ Success! Q-values shape: {q_vals.shape} (Expected: [{batch}, {300 * num_t}])")
