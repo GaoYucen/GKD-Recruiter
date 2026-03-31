@@ -98,7 +98,7 @@ def run_com_greedy(G, full_q, full_a, worker_indices, num_tasks, K=50):
     return seed_pairs
 
 if __name__ == "__main__":
-    # 1. 加载数据与初始化
+    # 1. Load Data and Initialization
     G, q_matrix, a_matrix, task_demands, worker_indices = load_env_data('data/env_params')
     num_nodes = G.number_of_nodes()
     num_tasks = len(task_demands)
@@ -106,17 +106,17 @@ if __name__ == "__main__":
     
     evaluator = GKDEvaluator(G, q_matrix, a_matrix, task_demands, worker_indices, num_simulations=50)
     
-    budget_K = 50 # 设定论文实验中的标准预算
-    print(f"======== 测试设置: 预算 K = {budget_K} ========")
+    budget_K = 50 # Standard budget for experiments
+    print(f"======== Test Setup: Budget K = {budget_K} ========")
 
-    # 2. 评估 DegGreedy
+    # 2. Evaluate DegGreedy
     deg_seeds = run_deg_greedy(G, q_matrix, worker_indices, K=budget_K)
     deg_results = evaluator.evaluate(deg_seeds)
-    print(f"📊 DegGreedy 核心 ETS: {deg_results['Effective_Task_Satisfaction']:.4f}")
-    print(f"   传统传播范围 (节点数): {deg_results['Expected_Influence_Spread']:.2f}")
+    print(f"📊 DegGreedy Core ETS: {deg_results['Effective_Task_Satisfaction']:.4f}")
+    print(f"   Traditional Influence Spread (Nodes): {deg_results['Expected_Influence_Spread']:.2f}")
 
-    # 3. 评估 ComGreedy
+    # 3. Evaluate ComGreedy
     com_seeds = run_com_greedy(G, full_q, full_a, worker_indices, num_tasks, K=budget_K)
     com_results = evaluator.evaluate(com_seeds)
-    print(f"📊 ComGreedy 核心 ETS: {com_results['Effective_Task_Satisfaction']:.4f}")
-    print(f"   传统传播范围 (节点数): {com_results['Expected_Influence_Spread']:.2f}")
+    print(f"📊 ComGreedy Core ETS: {com_results['Effective_Task_Satisfaction']:.4f}")
+    print(f"   Traditional Influence Spread (Nodes): {com_results['Expected_Influence_Spread']:.2f}")

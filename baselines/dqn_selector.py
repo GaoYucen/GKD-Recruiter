@@ -100,11 +100,11 @@ def train_dqn_selector(env, episodes=50, batch_size=64):
             # Construct next_state
             next_state = torch.tensor([1.0 - (env.current_step / env.budget_K), final_ets], dtype=torch.float32)
             
-            # 存入 Buffer
+            # Save to Buffer
             buffer.push(state, action, reward, next_state, done)
             state = next_state
             
-            # 经验回放更新网络
+            # Experience Replay for network update
             if len(buffer) > batch_size:
                 b_states, b_actions, b_rewards, b_next_states, b_dones = buffer.sample(batch_size)
                 
@@ -118,7 +118,7 @@ def train_dqn_selector(env, episodes=50, batch_size=64):
                 loss.backward()
                 optimizer.step()
                 
-        # 更新 Target Network
+        # Update Target Network
         if ep % 5 == 0:
             target_net.load_state_dict(policy_net.state_dict())
             
@@ -126,7 +126,7 @@ def train_dqn_selector(env, episodes=50, batch_size=64):
         print(f"   Episode {ep+1:02d} | ETS: {final_ets:.4f} | Epsilon: {epsilon:.2f} | Buffer: {len(buffer)}")
 
 if __name__ == "__main__":
-    # 初始化环境
-    env = GKDEnv(env_dir='data/env_params') # 确保路径能找到您的 data 文件夹
-    # 开始训练
+    # Initialize environment
+    env = GKDEnv(env_dir='data/env_params') # Ensure the path reaches your data folder
+    # Start training
     train_dqn_selector(env, episodes=20, batch_size=32)

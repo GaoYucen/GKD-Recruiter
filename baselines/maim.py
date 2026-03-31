@@ -10,7 +10,7 @@ import torch.optim as optim
 import random
 import os
 
-# 假设 VanillaDQN 和 ReplayBuffer 已经可以从上一个文件导入，这里为了完整性直接简写逻辑
+# Assume VanillaDQN and ReplayBuffer are available from dqn_selector
 from dqn_selector import VanillaDQN, ReplayBuffer
 from models.gkd_env import GKDEnv
 
@@ -101,10 +101,10 @@ def train_maim_lite(env, num_agents=5, episodes=50, batch_size=32):
                 agent.target_net.load_state_dict(agent.policy_net.state_dict())
                 
         epsilon = max(0.05, epsilon * 0.95)
-        print(f"   Episode {ep+1:02d} | 最终 ETS: {final_ets:.4f} | Epsilon: {epsilon:.2f}")
+        print(f"   Episode {ep+1:02d} | Final ETS: {final_ets:.4f} | Epsilon: {epsilon:.2f}")
 
 if __name__ == "__main__":
-    # 初始化环境
+    # Initialize environment
     env = GKDEnv(env_dir='data/env_params') 
-    # 开始训练
+    # Start training
     train_maim_lite(env, num_agents=5, episodes=20, batch_size=32)

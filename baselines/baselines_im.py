@@ -101,50 +101,50 @@ def run_celf(G, q_matrix, a_matrix, task_demands, worker_indices, K=50, m=5):
         heapq.heappush(heap, (-ets, w, t, 0)) # 0 indicates this gain was calculated with 0 prior seeds
         
         if (i + 1) % 300 == 0:
-            print(f"      进度: {i + 1} / {len(candidates)}")
+            print(f"      Progress: {i + 1} / {len(candidates)}")
 
-    # 3. 延迟贪心循环 (Lazy Forward Pass)
+    # 3. Lazy Forward Pass
     seed_pairs = []
     current_ets = 0.0
     
-    print("   => 正在执行延迟贪心增量选择...")
+    print("   => Performing lazy greedy incremental selection...")
     while len(seed_pairs) < K and heap:
         neg_gain, w, t, iter_calc = heapq.heappop(heap)
         
-        # 如果这个收益是在当前种子数量下计算的，说明它就是真实的当前最大边际收益
+        # If this gain was calculated in the current iteration, it's the true maximum marginal gain
         if iter_calc == len(seed_pairs):
             seed_pairs.append((w, t))
-            current_ets += (-neg_gain) # 近似累加 (实际有偏差因为非次模)
-            print(f"      已选种子: {len(seed_pairs)}/{K} | 节点: {w}, 任务: {t}")
+            current_ets += (-neg_gain) # Proximal accumulation (deviates slightly as it's non-submodular)
+            print(f"      Selected seeds: {len(seed_pairs)}/{K} | Node: {w}, Task: {t}")
         else:
-            # 否则，它可能是过时的。我们需要重新计算它在当前种子集合下的边际收益
+            # Otherwise, it's outdated. Re-calculate marginal gain under current seed set
             new_eval = fast_evaluator.evaluate(seed_pairs + [(w, t)])['Effective_Task_Satisfaction']
             current_true_ets = fast_evaluator.evaluate(seed_pairs)['Effective_Task_Satisfaction'] if seed_pairs else 0.0
             
             marginal_gain = new_eval - current_true_ets
-            # 重新压入堆中，标记为当前轮次计算的
+            # Re-push into heap, marked for current iteration
             heapq.heappush(heap, (-marginal_gain, w, t, len(seed_pairs)))
             
-    print(f"⏱️ 推断耗时: {time.time() - start_time:.4f}s")
+    print(f"⏱️ Inference Time: {time.time() - start_time:.4f}s")
     return seed_pairs
 
 if __name__ == "__main__":
-    # 初始化环境与评估器 (评估最终结果时使用 50 次 MC 保证严谨)
+    # Initialize environment and evaluator (use 50 MC simulations for final rigorous evaluation)
     G, q_matrix, a_matrix, task_demands, worker_indices = load_env_data('data/env_params')
     evaluator = GKDEvaluator(G, q_matrix, a_matrix, task_demands, worker_indices, num_simulations=50)
     budget_K = 50 
     
-    print(f"======== 测试设置: 预算 K = {budget_K} ========")
+    print(f"======== Test Setup: Budget K = {budget_K} ========")
 
-    # 1. 评估 NDD
+    # 1. Evaluate NDD
     ndd_seeds = run_ndd(G, q_matrix, worker_indices, K=budget_K)
     ndd_results = evaluator.evaluate(ndd_seeds)
-    print(f"📊 NDD 核心 ETS: {ndd_results['Effective_Task_Satisfaction']:.4f}")
-    print(f"   传统传播范围 (节点数): {ndd_results['Expected_Influence_Spread']:.2f}")
+    print(f"📊 NDD Core ETS: {ndd_results['Effective_Task_Satisfaction']:.4f}")
+    print(f"   Traditional Influence Spread (Nodes): {ndd_results['Expected_Influence_Spread']:.2f}")
 
-    # 2. 评估 CELF (耗时较长)
-    # 裁剪参数 m=5，以保证几分钟内能跑出结果。如果您想感受原汁原味的绝望，可以把 m 调到 100。
+    # 2. Evaluate CELF (Time-consuming)
+    # Budget parameter m=5 is used for feasibility. Change m to 100 for more thorough search.
     celf_seeds = run_celf(G, q_matrix, a_matrix, task_demands, worker_indices, K=budget_K, m=5)
     celf_results = evaluator.evaluate(celf_seeds)
-    print(f"📊 CELF 核心 ETS: {celf_results['Effective_Task_Satisfaction']:.4f}")
-    print(f"   传统传播范围 (节点数): {celf_results['Expected_Influence_Spread']:.2f}")
+    print(f"📊 CELF Core ETS: {celf_results['Effective_Task_Satisfaction']:.4f}")
+    print(f"   Traditional Influence Spread (Nodes): {celf_results['Expected_Influence_Spread']:.2f}")
