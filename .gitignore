@@ -1,0 +1,79 @@
+.DS_Store
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Testing / coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Type checking / lint caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Notebook / interactive tooling
+.ipynb_checkpoints/
+.python-version/
+
+# Additional Python tooling caches
+.hypothesis/
+.nox/
+.tox/
+.cache/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# Logs / temp
+*.log
+*.tmp
+*.temp
+
+# Project-generated data / artifacts
+data/
+data/raw/
+data/processed/
+data/experiments/
+*.parquet
+*.npz
+
+# Local training artifacts (keep bundled demo artifacts already tracked, ignore future ones)
+checkpoints/
+*.pt
+*.pth
+
+# OS junk
+**/.DS_Store
+
+# Paper / submission materials (do not push to remote)
+example_paper.tex
+example_paper.pdf
+cov_*.pdf
+
+# Large experiment traces and teacher labels
+**/ranking_samples.json
+**/rollout_samples.json
+**/teacher_samples.json
+
+# Generated result workspaces
+reports/current_eval/archive/
+reports/current_eval/*/checkpoints/

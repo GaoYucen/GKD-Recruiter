@@ -1,0 +1,23 @@
+dataset: gowalla
+raw_dir: data/raw/gowalla
+output_root: data/processed
+seed: 42
+graph_sizes: [3000, 5000]
+num_workers: 300
+num_tasks: 100
+min_checkins_per_user: 10
+min_unique_pois_per_user: 3
+min_task_checkins: 20
+min_task_unique_users: 5
+temporal_train_ratio: 0.9
+candidate_poi_pool: 2000
+distance_quantile: 0.95
+affinity_tau_km: 5.0
+demand_radius_km: 5.0
+demand_min: 3.0
+demand_max: 10.0
+reward_mode: uniform
+influence_mode: asymmetric_behavioral
+influence_min: 0.01
+influence_max: 0.20
+influence_mobility_tau_km: 50.0

@@ -1,0 +1,37 @@
+experiment:
+  dataset: gowalla_v3000_seed42
+  env_dir: data/experiments/gowalla_v3000_seed42/env_params
+  pretrain_dir: data/experiments/gowalla_v3000_seed42/pretrain
+  checkpoint: checkpoints/a4_rl_v3000/seed_selector_best.pt
+  seed: 42
+  q_network: candidate_aware_dueling
+  policy: q
+
+worlds:
+  decision: [2000]
+  test: [4000, 4001, 4002]
+
+budget:
+  eval_values: [25, 50, 75, 100, 150]
+
+candidates:
+  top_m: 5
+  u_max: 1
+  dynamic_candidates: true
+  wide_candidate_size: 128
+  shortlist_size: 32
+  residual_threshold: 0.005
+
+baseline_checkpoints:
+  dqn_selector: reports/current_eval/baseline_checkpoints/dqn_selector_smoke.pt
+  maim: checkpoints/maim_v3000/maim.pt
+
+evaluation:
+  methods: [A4_RL, CELF-IS-full, DegGreedy, NDD, FastSelector, ComGreedy, TSIM, MAIM, DQNSelector]
+  celf_limit: 256
+  tsim_factor: 2
+  fast_alpha: 0.5
+  report_dir: reports/paper_eval
+  csv_out: reports/paper_eval/main_v3000.csv
+  json_out: reports/paper_eval/main_v3000.json
+  md_out: reports/paper_eval/main_v3000.md
