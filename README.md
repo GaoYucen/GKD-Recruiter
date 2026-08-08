@@ -4,8 +4,6 @@ This is the official implementation of the ICML 2026 paper *GKD-Recruiter: Joint
 
 GKD-Recruiter is a Task-Aware framework for worker recruitment in Spatial Crowdsourcing (SC). It jointly models **social influence** and **worker-task affinity** via a heterogeneous graph, fuses these distinct signals with **Graph Knowledge Distillation**, and navigates the non-submodular seed-selection search space with **Rainbow DQN**.
 
-![Framework](https://github.com/GaoYucen/GKD-Recruiter)
-
 ## Key Components
 
 - **Influential GAT (IGAT)**: captures directional influence flow conditioned on edge propagation probabilities.
